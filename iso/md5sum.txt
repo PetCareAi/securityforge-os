@@ -1,0 +1,16 @@
+d41d8cd98f00b204e9800998ecf8427e  ./.disk/base_installable
+cd30bb0d0a4c5cd56626ba3560292a64  ./.disk/release_notes_url
+42cf23c3915294cb1e91b1de000454f8  ./.disk/info
+deae3f391c5cd48ce1dcd20ba408ed8f  ./.disk/casper-uuid-generic
+d06eeff1c79763b5a0f08c5757d60526  ./md5sum.txt
+a8dbb8ad6e2570d7765b06c85649a2af  ./EFI/BOOT/grub.cfg
+fbf10851c9adbc98f4f24a335a5eda00  ./EFI/BOOT/bootx64.efi
+ff2cdfe717eeeed42d0c8f3547fb539d  ./casper/initrd
+102e7bda3ff4572145809d25da2bbe11  ./casper/filesystem.size
+f82f1f9220128db2b3668c70240142e8  ./casper/vmlinuz
+4a02fe817ca69bee588bee62ca44275e  ./casper/filesystem.squashfs
+a8dbb8ad6e2570d7765b06c85649a2af  ./boot/grub/grub.cfg
+0cff58850dee9546af811d0e1cf45ccd  ./boot/memtest86+.bin
+012c9dca4107fbf7a87cfb534b667d95  ./boot/isolinux/isolinux.cfg
+9903b0d43fe184b53d0737620a4aee44  ./boot/isolinux/vesamenu.c32
+b0a2ab77bfd5306cd43188bffe09cd46  ./boot/isolinux/isolinux.bin
