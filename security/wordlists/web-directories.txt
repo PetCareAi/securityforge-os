@@ -1,0 +1,305 @@
+# SecurityForge Linux - Diretórios Web Avançados
+# Baseado em aplicações reais e frameworks comuns
+
+# Diretórios de administração
+admin
+administrator
+administration
+admin-panel
+admin_panel
+adminpanel
+control-panel
+controlpanel
+cp
+panel
+wp-admin
+wp-content
+wp-includes
+wp-login
+wordpress
+drupal
+joomla
+magento
+prestashop
+opencart
+
+# Diretórios de banco de dados
+phpmyadmin
+phpMyAdmin
+pma
+mysql
+sql
+database
+db
+databases
+sqlmanager
+adminer
+chive
+
+# Diretórios de backup
+backup
+backups
+bak
+old
+archive
+archives
+dump
+dumps
+export
+exports
+copy
+copies
+
+# Diretórios de configuração
+config
+configuration
+configs
+conf
+settings
+setting
+options
+env
+environment
+
+# Diretórios de logs
+logs
+log
+logging
+logfiles
+audit
+error
+errors
+access
+debug
+
+# Diretórios temporários
+temp
+tmp
+temporary
+cache
+caches
+session
+sessions
+var
+tmp_files
+
+# Diretórios de upload
+upload
+uploads
+files
+file
+images
+img
+pics
+pictures
+documents
+docs
+media
+assets
+static
+content
+
+# Diretórios de código
+src
+source
+sources
+lib
+libs
+library
+libraries
+include
+includes
+inc
+vendor
+vendors
+node_modules
+bower_components
+
+# Diretórios de API
+api
+apis
+rest
+restapi
+webservice
+webservices
+service
+services
+v1
+v2
+v3
+endpoint
+endpoints
+
+# Diretórios de desenvolvimento
+dev
+development
+test
+testing
+demo
+staging
+beta
+alpha
+debug
+dev-tools
+tools
+
+# Diretórios de sistema
+system
+sys
+bin
+sbin
+etc
+usr
+var
+opt
+proc
+cgi-bin
+fcgi-bin
+
+# Diretórios sensíveis
+private
+secret
+hidden
+internal
+protected
+secure
+security
+confidential
+restricted
+classified
+
+# Frameworks e CMS específicos
+# Laravel
+app
+bootstrap
+public
+resources
+routes
+storage
+vendor
+artisan
+
+# Symfony
+app
+bin
+src
+var
+vendor
+web
+
+# CodeIgniter
+application
+system
+user_guide
+
+# CakePHP
+app
+cake
+vendors
+
+# Zend Framework
+application
+library
+public
+data
+
+# Django
+static
+media
+templates
+locale
+
+# Rails
+app
+config
+db
+lib
+log
+public
+script
+test
+vendor
+
+# Node.js
+node_modules
+public
+views
+routes
+bin
+
+# .NET
+bin
+obj
+App_Data
+App_Code
+App_Themes
+App_GlobalResources
+App_LocalResources
+
+# Java
+WEB-INF
+META-INF
+classes
+lib
+
+# Servidor Web
+htdocs
+public_html
+www
+wwwroot
+html
+web
+webroot
+docroot
+site
+sites
+vhosts
+
+# Git e controle de versão
+.git
+.svn
+.hg
+.bzr
+CVS
+_darcs
+
+# Arquivos de configuração comuns
+.env
+.config
+.htaccess
+.htpasswd
+web.config
+nginx.conf
+apache.conf
+httpd.conf
+robots.txt
+sitemap.xml
+crossdomain.xml
+humans.txt
+favicon.ico
+apple-touch-icon.png
+
+# Diretórios de segurança
+security
+ssl
+certs
+certificates
+keys
+auth
+authentication
+authorization
+oauth
+jwt
+saml
+ldap
+active-directory
+
+# Diretórios de monitoramento
+monitoring
+metrics
+health
+status
+ping
+heartbeat
+check
+checks

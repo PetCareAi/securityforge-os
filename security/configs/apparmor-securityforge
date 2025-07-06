@@ -1,0 +1,112 @@
+# SecurityForge Linux - AppArmor Profile Avançado
+
+#include <tunables/global>
+
+# Profile para ferramentas do SecurityForge
+/opt/securityforge/tools/** {
+  #include <abstractions/base>
+  #include <abstractions/bash>
+  #include <abstractions/consoles>
+  #include <abstractions/nameservice>
+  #include <abstractions/python>
+  #include <abstractions/perl>
+  #include <abstractions/ruby>
+  
+  # Capabilities necessárias para ferramentas de segurança
+  capability net_admin,
+  capability net_raw,
+  capability sys_admin,
+  capability dac_override,
+  capability setuid,
+  capability setgid,
+  capability sys_ptrace,
+  
+  # Executáveis permitidos
+  /bin/bash ix,
+  /bin/sh ix,
+  /usr/bin/python* ix,
+  /usr/bin/perl ix,
+  /usr/bin/ruby* ix,
+  /usr/bin/nmap ux,
+  /usr/bin/nikto ux,
+  /usr/bin/sqlmap ux,
+  /usr/bin/hydra ux,
+  /usr/bin/john ux,
+  /usr/bin/hashcat ux,
+  /usr/bin/metasploit* ux,
+  /usr/bin/msfconsole ux,
+  /usr/bin/msfvenom ux,
+  /usr/bin/aircrack-ng ux,
+  /usr/bin/wireshark ux,
+  /usr/bin/tshark ux,
+  /usr/bin/tcpdump ux,
+  
+  # Diretórios de trabalho
+  /opt/securityforge/** rw,
+  /tmp/** rw,
+  /var/tmp/** rw,
+  /var/log/securityforge/** rw,
+  /home/secforge/** rw,
+  
+  # Acesso de rede necessário
+  network inet stream,
+  network inet dgram,
+  network inet6 stream,
+  network inet6 dgram,
+  network packet raw,
+  network netlink raw,
+  
+  # Acesso ao sistema de arquivos
+  /proc/sys/net/** r,
+  /sys/class/net/** r,
+  /dev/urandom r,
+  /dev/random r,
+  
+  # Denegar acessos perigosos
+  deny /proc/sys/** w,
+  deny /sys/** w,
+  deny mount,
+  deny umount,
+  deny @{PROC}/[0-9]*/mem r,
+  deny /boot/** r,
+  deny /etc/shadow r,
+  deny /etc/gshadow r,
+}
+
+# Profile específico para Metasploit
+/usr/bin/msfconsole {
+  #include <abstractions/base>
+  #include <abstractions/ruby>
+  #include <abstractions/nameservice>
+  
+  capability net_admin,
+  capability net_raw,
+  capability setuid,
+  capability setgid,
+  
+  /usr/bin/msfconsole r,
+  /usr/share/metasploit-framework/** r,
+  /opt/metasploit-framework/** rw,
+  /home/secforge/.msf4/** rw,
+  
+  network inet stream,
+  network inet dgram,
+  network packet raw,
+  
+  /tmp/** rw,
+  /var/tmp/** rw,
+}
+
+# Profile para Burp Suite
+/opt/BurpSuite/BurpSuiteCommunity {
+  #include <abstractions/base>
+  #include <abstractions/java>
+  #include <abstractions/X>
+  
+  /opt/BurpSuite/** r,
+  /home/secforge/.BurpSuite/** rw,
+  /tmp/** rw,
+  
+  network inet stream,
+  network inet dgram,
+}

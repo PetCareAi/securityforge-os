@@ -1,0 +1,35 @@
+# SecurityForge Linux - Configuração de Rede Segura
+[Match]
+Name=eth* en* wl*
+
+[Network]
+DHCP=yes
+IPv6AcceptRA=no
+IPForward=no
+IPMasquerade=no
+LLDP=no
+EmitLLDP=no
+MulticastDNS=no
+LLMNR=no
+
+[DHCP]
+UseNTP=no
+UseDNS=no
+SendHostname=no
+ClientIdentifier=mac
+Anonymize=yes
+UseMTU=yes
+UseRoutes=yes
+UseGateway=yes
+RequestBroadcast=yes
+
+[DHCPv4]
+SendRelease=no
+UseDomainName=no
+UseHostname=no
+UseTimezone=no
+
+[DHCPv6]
+WithoutRA=solicit
+UseDNS=no
+UseHostname=no
