@@ -1,0 +1,16 @@
+--2025-07-07 15:43:19--  http://br.archive.ubuntu.com/ubuntu/dists/jammy/InRelease
+Resolving br.archive.ubuntu.com (br.archive.ubuntu.com)... 200.236.31.4, 2801:82:80ff:8000::5
+Connecting to br.archive.ubuntu.com (br.archive.ubuntu.com)|200.236.31.4|:80... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 270087 (264K)
+Saving to: '/home/kali/securityforge-os/chroot/var/lib/apt/lists/partial/br.archive.ubuntu.com_ubuntu_dists_jammy_InRelease'
+
+     0K .......... .......... .......... .......... .......... 18% 1.13M 0s
+    50K .......... .......... .......... .......... .......... 37% 2.39M 0s
+   100K .......... .......... .......... .......... .......... 56% 2.16M 0s
+   150K .......... .......... .......... .......... .......... 75% 1.21M 0s
+   200K .......... .......... .......... .......... .......... 94% 2.19M 0s
+   250K .......... ...                                        100% 12.8M=0.1s
+
+2025-07-07 15:43:19 (1.72 MB/s) - '/home/kali/securityforge-os/chroot/var/lib/apt/lists/partial/br.archive.ubuntu.com_ubuntu_dists_jammy_InRelease' saved [270087/270087]
+

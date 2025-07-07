@@ -1,0 +1,5 @@
+--2025-07-07 15:43:19--  http://192.168.1.1/ubuntu/dists/jammy/Release
+Connecting to 192.168.1.1:80... connected.
+HTTP request sent, awaiting response... 404 Not Found
+2025-07-07 15:43:19 ERROR 404: Not Found.
+

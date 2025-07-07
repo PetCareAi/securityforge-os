@@ -1,0 +1,6 @@
+--2025-07-07 15:43:02--  http://old-releases.ubuntu.com/ubuntu/dists/jammy/InRelease
+Resolving old-releases.ubuntu.com (old-releases.ubuntu.com)... 91.189.91.123, 91.189.91.124, 185.125.190.37, ...
+Connecting to old-releases.ubuntu.com (old-releases.ubuntu.com)|91.189.91.123|:80... connected.
+HTTP request sent, awaiting response... 404 Not Found
+2025-07-07 15:43:03 ERROR 404: Not Found.
+
