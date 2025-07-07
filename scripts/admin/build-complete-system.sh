@@ -18,8 +18,22 @@ readonly CYAN='\033[0;36m'
 readonly WHITE='\033[1;37m'
 readonly NC='\033[0m'
 
+# Detectar usuário atual e home directory
+CURRENT_USER=$(whoami)
+if [ "$CURRENT_USER" = "root" ]; then
+    REAL_USER=${SUDO_USER:-$(logname 2>/dev/null || echo "root")}
+    if [ "$REAL_USER" = "root" ]; then
+        USER_HOME="/root"
+    else
+        USER_HOME="/home/$REAL_USER"
+    fi
+else
+    REAL_USER="$CURRENT_USER"
+    USER_HOME="$HOME"
+fi
+
 # Configurações do sistema
-readonly WORK_DIR="/home/estevam/securityforge-os"
+readonly WORK_DIR="$USER_HOME/securityforge-os"
 readonly ROOTFS_DIR="$WORK_DIR/rootfs"
 readonly ISO_DIR="$WORK_DIR/iso"
 readonly CHROOT_DIR="$WORK_DIR/chroot"
@@ -29,7 +43,6 @@ readonly LOG_FILE="$WORK_DIR/build.log"
 # Configurações do sistema operacional
 readonly DISTRO_CODENAME="jammy"
 readonly DISTRO_VERSION="22.04"
-readonly KERNEL_VERSION=""
 readonly SYSTEM_USER="secforge"
 readonly SYSTEM_PASSWORD="live"
 readonly HOSTNAME="securityforge"
@@ -42,42 +55,63 @@ readonly SECURITY_MIRROR="http://security.ubuntu.com/ubuntu"
 # FUNÇÕES DE LOGGING E UTILITÁRIOS
 # ============================================================================
 
-# Função de logging com timestamp
+create_base_directories() {
+    echo "Criando diretórios base..."
+    mkdir -p "$WORK_DIR"
+    mkdir -p "$(dirname "$LOG_FILE")"
+    touch "$LOG_FILE"
+    chmod 644 "$LOG_FILE"
+    
+    if [ "$CURRENT_USER" = "root" ] && [ "$REAL_USER" != "root" ]; then
+        chown -R "$REAL_USER:$REAL_USER" "$WORK_DIR" 2>/dev/null || true
+    fi
+}
+
 log() { 
     local msg="[$(date +'%H:%M:%S')] $1"
-    echo -e "${BLUE}$msg${NC}" | tee -a "$LOG_FILE"
+    echo -e "${BLUE}$msg${NC}"
+    echo "$msg" >> "$LOG_FILE" 2>/dev/null || echo "$msg"
 }
 
 success() { 
     local msg="✅ $1"
-    echo -e "${GREEN}$msg${NC}" | tee -a "$LOG_FILE"
+    echo -e "${GREEN}$msg${NC}"
+    echo "$msg" >> "$LOG_FILE" 2>/dev/null || echo "$msg"
 }
 
 warning() { 
     local msg="⚠️  $1"
-    echo -e "${YELLOW}$msg${NC}" | tee -a "$LOG_FILE"
+    echo -e "${YELLOW}$msg${NC}"
+    echo "$msg" >> "$LOG_FILE" 2>/dev/null || echo "$msg"
 }
 
 error() { 
     local msg="❌ $1"
-    echo -e "${RED}$msg${NC}" | tee -a "$LOG_FILE"
+    echo -e "${RED}$msg${NC}"
+    echo "$msg" >> "$LOG_FILE" 2>/dev/null || echo "$msg"
 }
 
 header() { 
-    echo -e "${PURPLE}$1${NC}" | tee -a "$LOG_FILE"
+    echo -e "${PURPLE}$1${NC}"
+    echo "$1" >> "$LOG_FILE" 2>/dev/null || echo "$1"
 }
 
 info() { 
-    echo -e "${CYAN}ℹ️  $1${NC}" | tee -a "$LOG_FILE"
+    echo -e "${CYAN}ℹ️  $1${NC}"
+    echo "$1" >> "$LOG_FILE" 2>/dev/null || echo "$1"
 }
 
 section() { 
-    echo -e "${WHITE}════════════════════════════════════════════════════════════════════════════════${NC}" | tee -a "$LOG_FILE"
-    echo -e "${WHITE}$1${NC}" | tee -a "$LOG_FILE"
-    echo -e "${WHITE}════════════════════════════════════════════════════════════════════════════════${NC}" | tee -a "$LOG_FILE"
+    echo -e "${WHITE}════════════════════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${WHITE}$1${NC}"
+    echo -e "${WHITE}════════════════════════════════════════════════════════════════════════════════${NC}"
+    {
+        echo "════════════════════════════════════════════════════════════════════════════════"
+        echo "$1"
+        echo "════════════════════════════════════════════════════════════════════════════════"
+    } >> "$LOG_FILE" 2>/dev/null || true
 }
 
-# Função para executar comandos com retry
 execute_with_retry() {
     local cmd="$1"
     local retries="${2:-3}"
@@ -103,20 +137,15 @@ execute_with_retry() {
 # FUNÇÕES DE LIMPEZA E PREPARAÇÃO
 # ============================================================================
 
-# Limpeza ultra-robusta
 ultra_cleanup() {
     log "Executando limpeza ultra-robusta..."
     
-    # Matar todos os processos que podem estar usando o chroot
     if [ -d "$CHROOT_DIR" ]; then
         log "Terminando processos no chroot..."
         fuser -k "$CHROOT_DIR" 2>/dev/null || true
         fuser -9 -k "$CHROOT_DIR" 2>/dev/null || true
-        
-        # Aguardar um pouco para os processos terminarem
         sleep 3
         
-        # Lista de mount points para desmontar
         local mount_points=(
             "$CHROOT_DIR/run/snapd/ns/firefox.mnt"
             "$CHROOT_DIR/run/user"
@@ -130,7 +159,6 @@ ultra_cleanup() {
             "$CHROOT_DIR/dev"
         )
         
-        # Desmontar de forma agressiva
         for mount_point in "${mount_points[@]}"; do
             if mountpoint -q "$mount_point" 2>/dev/null; then
                 log "Desmontando: $mount_point"
@@ -139,23 +167,59 @@ ultra_cleanup() {
             fi
         done
         
-        # Aguardar mais um pouco
         sleep 2
         
-        # Tentar remover o diretório
         if ! rm -rf "$CHROOT_DIR" 2>/dev/null; then
             warning "Não foi possível remover $CHROOT_DIR, movendo para backup"
             mv "$CHROOT_DIR" "$CHROOT_DIR.backup.$(date +%s)" 2>/dev/null || true
         fi
     fi
     
-    # Remover outros diretórios
     rm -rf "$ROOTFS_DIR" "$ISO_DIR" 2>/dev/null || true
-    
     success "Limpeza concluída"
 }
 
-# Verificar e instalar dependências do host
+verify_debootstrap() {
+    section "VERIFICANDO DEBOOTSTRAP"
+    
+    log "Verificando se debootstrap foi bem sucedido..."
+    
+    local essential_files=(
+        "$CHROOT_DIR/bin/bash"
+        "$CHROOT_DIR/bin/sh"
+        "$CHROOT_DIR/usr/bin/dpkg"
+        "$CHROOT_DIR/etc"
+        "$CHROOT_DIR/var"
+        "$CHROOT_DIR/usr"
+        "$CHROOT_DIR/lib"
+        "$CHROOT_DIR/sbin"
+    )
+    
+    local missing_files=()
+    for file in "${essential_files[@]}"; do
+        if [ ! -e "$file" ]; then
+            missing_files+=("$file")
+        fi
+    done
+    
+    if [ ${#missing_files[@]} -gt 0 ]; then
+        error "Debootstrap incompleto. Arquivos faltando:"
+        for file in "${missing_files[@]}"; do
+            error "  - $file"
+        done
+        return 1
+    fi
+    
+    # Verificar se podemos executar comandos básicos
+    if ! chroot "$CHROOT_DIR" /bin/bash -c "echo 'Test OK'" >/dev/null 2>&1; then
+        error "Não é possível executar comandos no chroot"
+        return 1
+    fi
+    
+    success "Debootstrap verificado com sucesso"
+    return 0
+}
+
 install_host_dependencies() {
     section "INSTALANDO DEPENDÊNCIAS DO HOST"
     
@@ -187,20 +251,80 @@ install_host_dependencies() {
     )
     
     execute_with_retry "apt install -y ${packages[*]}"
-    
     success "Dependências do host instaladas"
+}
+
+# ============================================================================
+# EXECUÇÃO DE DEBOOTSTRAP ROBUSTO
+# ============================================================================
+
+run_debootstrap() {
+    section "EXECUTANDO DEBOOTSTRAP"
+    
+    local max_attempts=3
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        log "Tentativa $attempt de $max_attempts - Criando sistema base Ubuntu $DISTRO_VERSION..."
+        
+        if [ -d "$CHROOT_DIR" ]; then
+            log "Removendo chroot anterior..."
+            rm -rf "$CHROOT_DIR"
+        fi
+        
+        mkdir -p "$CHROOT_DIR"
+        
+        if debootstrap \
+            --arch=amd64 \
+            --variant=minbase \
+            --include=systemd-sysv,locales,language-pack-en,ubuntu-minimal,apt-utils \
+            --verbose \
+            "$DISTRO_CODENAME" \
+            "$CHROOT_DIR" \
+            "$UBUNTU_MIRROR"; then
+            
+            log "Debootstrap concluído, verificando integridade..."
+            if verify_debootstrap; then
+                success "Debootstrap executado com sucesso na tentativa $attempt"
+                return 0
+            else
+                warning "Debootstrap incompleto na tentativa $attempt"
+            fi
+        else
+            warning "Debootstrap falhou na tentativa $attempt"
+        fi
+        
+        ((attempt++))
+        if [ $attempt -le $max_attempts ]; then
+            log "Aguardando 10 segundos antes da próxima tentativa..."
+            sleep 10
+        fi
+    done
+    
+    error "Debootstrap falhou após $max_attempts tentativas"
+    return 1
 }
 
 # ============================================================================
 # FUNÇÕES PARA CHROOT
 # ============================================================================
 
-# Montar sistemas de arquivos para chroot
 mount_chroot_systems() {
     log "Montando sistemas de arquivos para chroot..."
     
-    # Criar diretórios se não existirem
-    mkdir -p "$CHROOT_DIR"/{proc,sys,dev/pts,run,tmp}
+    # Criar diretórios essenciais se não existirem
+    mkdir -p "$CHROOT_DIR"/{proc,sys,dev/pts,run,tmp,etc,var,usr}
+    
+    # Verificar se o diretório /etc existe e é gravável
+    if [ ! -d "$CHROOT_DIR/etc" ]; then
+        error "Diretório /etc não encontrado no chroot!"
+        return 1
+    fi
+    
+    if [ ! -w "$CHROOT_DIR/etc" ]; then
+        error "Diretório /etc não é gravável!"
+        return 1
+    fi
     
     # Montar sistemas essenciais
     mount --bind /dev "$CHROOT_DIR/dev" 2>/dev/null || true
@@ -209,14 +333,17 @@ mount_chroot_systems() {
     mount --bind /sys "$CHROOT_DIR/sys" 2>/dev/null || true
     mount --bind /run "$CHROOT_DIR/run" 2>/dev/null || true
     
-    # Configurar resolv.conf
-    echo "nameserver 8.8.8.8" > "$CHROOT_DIR/etc/resolv.conf"
-    echo "nameserver 8.8.4.4" >> "$CHROOT_DIR/etc/resolv.conf"
+    # Configurar resolv.conf com verificação
+    log "Configurando resolv.conf..."
+    cat > "$CHROOT_DIR/etc/resolv.conf" << EOF
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+nameserver 1.1.1.1
+EOF
     
     success "Sistemas de arquivos montados"
 }
 
-# Executar comando no chroot com tratamento robusto de erros
 chroot_exec() {
     local cmd="$1"
     local allow_fail="${2:-false}"
@@ -243,17 +370,14 @@ chroot_exec() {
     fi
 }
 
-# Instalar pacotes no chroot com retry
 install_packages() {
     local packages="$1"
     local retry_individual="${2:-true}"
     
     log "Instalando pacotes: $packages"
     
-    # Atualizar repositórios primeiro
     execute_with_retry "chroot_exec 'apt update'" 3 5
     
-    # Tentar instalar todos os pacotes de uma vez
     if chroot_exec "apt install -y $packages" true; then
         success "Todos os pacotes instalados com sucesso"
         return 0
@@ -262,7 +386,6 @@ install_packages() {
     if [ "$retry_individual" = "true" ]; then
         warning "Instalação em lote falhou, tentando individualmente..."
         
-        # Instalar pacotes individualmente
         for pkg in $packages; do
             if chroot_exec "apt install -y $pkg" true; then
                 success "Pacote instalado: $pkg"
@@ -277,7 +400,6 @@ install_packages() {
 # FUNÇÕES DE CONFIGURAÇÃO DO SISTEMA
 # ============================================================================
 
-# Configurar repositórios do Ubuntu
 configure_repositories() {
     section "CONFIGURANDO REPOSITÓRIOS"
     
@@ -296,7 +418,6 @@ EOF
     success "Repositórios configurados"
 }
 
-# Configurar locale do sistema
 configure_locale() {
     section "CONFIGURANDO LOCALE"
     
@@ -318,7 +439,6 @@ EOF
     success "Locale configurado"
 }
 
-# Configurar timezone
 configure_timezone() {
     log "Configurando timezone..."
     chroot_exec "ln -sf /usr/share/zoneinfo/UTC /etc/localtime"
@@ -326,7 +446,6 @@ configure_timezone() {
     success "Timezone configurado"
 }
 
-# Configurar informações do sistema
 configure_system_info() {
     section "CONFIGURANDO INFORMAÇÕES DO SISTEMA"
     
@@ -372,17 +491,14 @@ VARIANT="Security Distribution"
 VARIANT_ID=security
 EOF
     
-    # Copiar para lsb-release
     cp "$CHROOT_DIR/etc/os-release" "$CHROOT_DIR/etc/lsb-release"
-    
     success "Informações do sistema configuradas"
 }
 
 # ============================================================================
-# FUNÇÕES DE INSTALAÇÃO DE SOFTWARE
+# INSTALAÇÃO DE SOFTWARE
 # ============================================================================
 
-# Instalar sistema base
 install_base_system() {
     section "INSTALANDO SISTEMA BASE"
     
@@ -427,7 +543,6 @@ install_base_system() {
     success "Sistema base instalado"
 }
 
-# Instalar kernel e drivers
 install_kernel_and_drivers() {
     section "INSTALANDO KERNEL E DRIVERS"
     
@@ -436,7 +551,6 @@ install_kernel_and_drivers() {
         linux-image-generic
         linux-headers-generic
         linux-firmware
-        linux-modules-extra-$(uname -r)
     " false
     
     log "Instalando drivers gráficos..."
@@ -474,7 +588,6 @@ install_kernel_and_drivers() {
     success "Kernel e drivers instalados"
 }
 
-# Instalar ferramentas para sistema live
 install_live_system_tools() {
     section "INSTALANDO FERRAMENTAS PARA SISTEMA LIVE"
     
@@ -492,7 +605,6 @@ install_live_system_tools() {
     success "Ferramentas live instaladas"
 }
 
-# Instalar ambiente desktop
 install_desktop_environment() {
     section "INSTALANDO AMBIENTE DESKTOP"
     
@@ -506,9 +618,14 @@ install_desktop_environment() {
         xfce4-terminal
         xfce4-taskmanager
         xfce4-screenshooter
+        xfce4-whiskermenu-plugin
+        xfce4-power-manager
+        xfce4-notifyd
         lightdm
         lightdm-gtk-greeter
         lightdm-gtk-greeter-settings
+        plymouth
+        plymouth-themes
     "
     
     log "Instalando aplicações essenciais..."
@@ -525,6 +642,8 @@ install_desktop_environment() {
         gnome-system-monitor
         evince
         gedit
+        gdebi
+        synaptic
     "
     
     log "Instalando fontes e temas..."
@@ -536,12 +655,14 @@ install_desktop_environment() {
         ubuntu-mono
         adwaita-icon-theme
         hicolor-icon-theme
+        papirus-icon-theme
+        arc-theme
+        numix-gtk-theme
     "
     
     success "Ambiente desktop instalado"
 }
 
-# Instalar ferramentas de segurança
 install_security_tools() {
     section "INSTALANDO FERRAMENTAS DE SEGURANÇA"
     
@@ -634,7 +755,6 @@ install_security_tools() {
 # CONFIGURAÇÃO DE USUÁRIOS E SISTEMA LIVE
 # ============================================================================
 
-# Criar usuário do sistema
 create_system_user() {
     section "CRIANDO USUÁRIO DO SISTEMA"
     
@@ -655,7 +775,6 @@ EOF
     success "Usuário $SYSTEM_USER criado"
 }
 
-# Configurar autologin
 configure_autologin() {
     section "CONFIGURANDO AUTOLOGIN"
     
@@ -672,10 +791,25 @@ greeter-show-manual-login=true
 allow-guest=false
 EOF
     
+    # Configurar greeter
+    cat > "$CHROOT_DIR/etc/lightdm/lightdm-gtk-greeter.conf" << EOF
+[greeter]
+background=/usr/share/pixmaps/securityforge-wallpaper.png
+theme-name=Arc-Dark
+icon-theme-name=Papirus
+font-name=Ubuntu 11
+xft-antialias=true
+xft-dpi=96
+xft-hintstyle=slight
+xft-rgba=rgb
+show-indicators=~host;~spacer;~clock;~spacer;~session;~language;~a11y;~power
+show-clock=true
+clock-format=%H:%M
+EOF
+    
     success "Autologin configurado"
 }
 
-# Configurar ambiente do usuário
 configure_user_environment() {
     section "CONFIGURANDO AMBIENTE DO USUÁRIO"
     
@@ -745,6 +879,62 @@ if [ -f /opt/securityforge/scripts/banner.sh ]; then
 fi
 EOF
     
+    log "Configurando XFCE para o usuário..."
+    mkdir -p "$CHROOT_DIR/home/$SYSTEM_USER/.config/xfce4/xfconf/xfce-perchannel-xml"
+    
+    # Configurar tema escuro e wallpaper
+    cat > "$CHROOT_DIR/home/$SYSTEM_USER/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-desktop" version="1.0">
+  <property name="backdrop" type="empty">
+    <property name="screen0" type="empty">
+      <property name="monitor0" type="empty">
+        <property name="workspace0" type="empty">
+          <property name="color-style" type="int" value="0"/>
+          <property name="image-style" type="int" value="5"/>
+          <property name="last-image" type="string" value="/usr/share/pixmaps/securityforge-wallpaper.png"/>
+        </property>
+      </property>
+    </property>
+  </property>
+</channel>
+EOF
+    
+    # Configurar painel
+    cat > "$CHROOT_DIR/home/$SYSTEM_USER/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-panel" version="1.0">
+  <property name="configver" type="int" value="2"/>
+  <property name="panels" type="array">
+    <value type="int" value="1"/>
+    <property name="panel-1" type="empty">
+      <property name="position" type="string" value="p=6;x=0;y=0"/>
+      <property name="length" type="uint" value="100"/>
+      <property name="position-locked" type="bool" value="true"/>
+      <property name="size" type="uint" value="30"/>
+      <property name="plugin-ids" type="array">
+        <value type="int" value="1"/>
+        <value type="int" value="2"/>
+        <value type="int" value="3"/>
+        <value type="int" value="4"/>
+        <value type="int" value="5"/>
+        <value type="int" value="6"/>
+        <value type="int" value="7"/>
+      </property>
+    </property>
+  </property>
+  <property name="plugins" type="empty">
+    <property name="plugin-1" type="string" value="whiskermenu"/>
+    <property name="plugin-2" type="string" value="tasklist"/>
+    <property name="plugin-3" type="string" value="separator"/>
+    <property name="plugin-4" type="string" value="systray"/>
+    <property name="plugin-5" type="string" value="pulseaudio"/>
+    <property name="plugin-6" type="string" value="clock"/>
+    <property name="plugin-7" type="string" value="actions"/>
+  </property>
+</channel>
+EOF
+    
     log "Criando desktop do usuário..."
     mkdir -p "$CHROOT_DIR/home/$SYSTEM_USER/Desktop"
     
@@ -806,11 +996,6 @@ EOF
     success "Ambiente do usuário configurado"
 }
 
-# ============================================================================
-# CONFIGURAÇÃO DO SISTEMA LIVE
-# ============================================================================
-
-# Configurar sistema live
 configure_live_system() {
     section "CONFIGURANDO SISTEMA LIVE"
     
@@ -836,7 +1021,6 @@ ext4
 usb-storage
 EOF
     
-    # Configurar initramfs.conf
     cat > "$CHROOT_DIR/etc/initramfs-tools/initramfs.conf" << EOF
 MODULES=most
 KEYMAP=n
@@ -847,60 +1031,9 @@ RUNSIZE=10%
 FSTYPE=ext4
 EOF
     
-    # Script personalizado para live system
-    mkdir -p "$CHROOT_DIR/usr/share/initramfs-tools/scripts/casper-bottom"
-    cat > "$CHROOT_DIR/usr/share/initramfs-tools/scripts/casper-bottom/99securityforge" << 'EOF'
-#!/bin/sh
-
-PREREQ=""
-
-prereqs()
-{
-    echo "$PREREQ"
-}
-
-case $1 in
-prereqs)
-    prereqs
-    exit 0
-    ;;
-esac
-
-. /scripts/casper-functions
-
-log_begin_msg "Configurando SecurityForge Live Session"
-
-# Configurar usuário live
-if [ -n "${USERNAME}" ]; then
-    if ! id "${USERNAME}" > /dev/null 2>&1; then
-        adduser --disabled-password --gecos "${USERFULLNAME:-Live session user}" ${USERNAME}
-        echo "${USERNAME}:live" | chroot /root chpasswd
-        for group in adm admin dialout cdrom plugdev video audio netdev bluetooth fuse sudo docker wireshark; do
-            chroot /root adduser ${USERNAME} ${group} >/dev/null 2>&1 || true
-        done
-        
-        # Configurar autologin
-        chroot /root sed -i "s/^#autologin-user=.*$/autologin-user=${USERNAME}/" /etc/lightdm/lightdm.conf 2>/dev/null || true
-        
-        # Criar estrutura SecurityForge
-        chroot /root mkdir -p /opt/securityforge/{tools,scripts,wordlists,workspace,reports} || true
-        chroot /root chown -R ${USERNAME}:${USERNAME} /opt/securityforge || true
-    fi
-fi
-
-log_end_msg
-EOF
-    
-    chmod +x "$CHROOT_DIR/usr/share/initramfs-tools/scripts/casper-bottom/99securityforge"
-    
     success "Sistema live configurado"
 }
 
-# ============================================================================
-# CONFIGURAÇÃO DE SERVIÇOS
-# ============================================================================
-
-# Configurar serviços do sistema
 configure_services() {
     section "CONFIGURANDO SERVIÇOS"
     
@@ -919,16 +1052,17 @@ configure_services() {
     success "Serviços configurados"
 }
 
-# ============================================================================
-# CRIAÇÃO DE ESTRUTURA SECURITYFORGE
-# ============================================================================
-
-# Criar estrutura SecurityForge
 create_securityforge_structure() {
     section "CRIANDO ESTRUTURA SECURITYFORGE"
     
     log "Criando diretórios SecurityForge..."
     mkdir -p "$CHROOT_DIR/opt/securityforge"/{tools,scripts,wordlists,workspace,reports,docs,configs,exploits,payloads}
+    
+    log "Criando wallpaper personalizado..."
+    # Criar um wallpaper simples em ASCII art convertido para imagem
+    cat > "$CHROOT_DIR/usr/share/pixmaps/securityforge-wallpaper.png" << 'EOF'
+# Placeholder for wallpaper - seria uma imagem PNG real
+EOF
     
     log "Criando wordlists básicas..."
     cat > "$CHROOT_DIR/opt/securityforge/wordlists/rockyou.txt" << 'EOF'
@@ -991,18 +1125,11 @@ echo ""
 EOF
     
     chmod +x "$CHROOT_DIR/opt/securityforge/scripts/banner.sh"
-    
-    # Configurar permissões
     chroot_exec "chown -R $SYSTEM_USER:$SYSTEM_USER /opt/securityforge"
     
     success "Estrutura SecurityForge criada"
 }
 
-# ============================================================================
-# REGENERAÇÃO DO INITRAMFS
-# ============================================================================
-
-# Regenerar initramfs
 regenerate_initramfs() {
     section "REGENERANDO INITRAMFS"
     
@@ -1012,11 +1139,6 @@ regenerate_initramfs() {
     success "Initramfs regenerado"
 }
 
-# ============================================================================
-# LIMPEZA FINAL
-# ============================================================================
-
-# Limpeza final do sistema
 final_cleanup() {
     section "EXECUTANDO LIMPEZA FINAL"
     
@@ -1040,11 +1162,6 @@ final_cleanup() {
     success "Limpeza final concluída"
 }
 
-# ============================================================================
-# FINALIZAÇÃO
-# ============================================================================
-
-# Desmontar sistemas e preparar rootfs
 finalize_build() {
     section "FINALIZANDO BUILD"
     
@@ -1060,10 +1177,8 @@ finalize_build() {
         --exclude='/tmp/*' \
         --exclude='/var/tmp/*'
     
-    # Criar diretórios essenciais no rootfs
     mkdir -p "$ROOTFS_DIR"/{proc,sys,dev,run,tmp,var/tmp}
     
-    # Criar arquivo de informações do build
     cat > "$ROOTFS_DIR/opt/securityforge/BUILD_INFO.txt" << EOF
 SecurityForge Linux 3.1.0 - CyberNinja
 Build Date: $(date)
@@ -1082,53 +1197,46 @@ EOF
 # ============================================================================
 
 main() {
-    # Verificar se é root
     if [[ $EUID -ne 0 ]]; then
        error "Este script deve ser executado como root"
        exit 1
     fi
     
-    # Mostrar banner
+    create_base_directories
+    
     header "╔═══════════════════════════════════════════════════════════════════════════════╗"
     header "║                🛡️  SECURITYFORGE LINUX BUILD AVANÇADO v3.1.0               ║"
     header "║                    Sistema Operacional Completo - CyberNinja                ║"
     header "╚═══════════════════════════════════════════════════════════════════════════════╝"
     
-    # Criar arquivo de log
-    mkdir -p "$(dirname "$LOG_FILE")"
-    echo "SecurityForge Linux Build Started at $(date)" > "$LOG_FILE"
+    echo "SecurityForge Linux Build Started at $(date)" >> "$LOG_FILE"
+    echo "User: $REAL_USER (running as $CURRENT_USER)" >> "$LOG_FILE"
+    echo "Work Directory: $WORK_DIR" >> "$LOG_FILE"
     
-    # Executar etapas do build
     install_host_dependencies
     ultra_cleanup
     mkdir -p "$CHROOT_DIR" "$ROOTFS_DIR" "$ISO_DIR"
     
-    # Executar debootstrap
-    section "EXECUTANDO DEBOOTSTRAP"
-    log "Criando sistema base Ubuntu $DISTRO_VERSION..."
-    execute_with_retry "debootstrap --arch=amd64 --variant=minbase --include=systemd-sysv,locales,language-pack-en,ubuntu-minimal $DISTRO_CODENAME '$CHROOT_DIR' '$UBUNTU_MIRROR'"
-    
-    # Verificar se debootstrap funcionou
-    if [ ! -f "$CHROOT_DIR/bin/bash" ]; then
-        error "Debootstrap falhou!"
+    if ! run_debootstrap; then
+        error "Falha crítica no debootstrap. Abortando."
         exit 1
     fi
     
-    # Montar sistemas e continuar build
+    if ! verify_debootstrap; then
+        error "Sistema base não está íntegro. Abortando."
+        exit 1
+    fi
+    
     mount_chroot_systems
     configure_repositories
     configure_locale
     configure_timezone
     configure_system_info
-    
-    # Instalar software
     install_base_system
     install_kernel_and_drivers
     install_live_system_tools
     install_desktop_environment
     install_security_tools
-    
-    # Configurar sistema
     create_system_user
     configure_autologin
     configure_user_environment
@@ -1139,7 +1247,6 @@ main() {
     final_cleanup
     finalize_build
     
-    # Relatório final
     header "🎯 BUILD CONCLUÍDO COM SUCESSO!"
     success "Sistema SecurityForge Linux criado com sucesso!"
     info "Localização: $ROOTFS_DIR"
@@ -1149,16 +1256,16 @@ main() {
     echo ""
     header "📋 INFORMAÇÕES DO SISTEMA CRIADO:"
     echo "✅ Sistema Ubuntu $DISTRO_VERSION LTS completo"
-    echo "✅ Desktop XFCE4 configurado"
+    echo "✅ Desktop XFCE4 configurado com tema escuro"
     echo "✅ Usuário '$SYSTEM_USER' criado (senha: $SYSTEM_PASSWORD)"
     echo "✅ Ferramentas de segurança instaladas"
     echo "✅ Sistema live configurado"
     echo "✅ Estrutura SecurityForge completa"
+    echo "✅ Interface gráfica melhorada (sem tela preta)"
     echo ""
-    info "Próximo passo: sudo ./admin/create-iso-fixed.sh"
+    info "Próximo passo: sudo ./create-iso-fixed.sh"
     
     header "═══════════════════════════════════════════════════════════════════════════════"
 }
 
-# Executar função principal
 main "$@"
